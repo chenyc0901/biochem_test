@@ -4,8 +4,111 @@ import random
 import os
 import plotly.express as px
 from PIL import Image
+import openai
 
 EXCEL_FILE = "test_with_answers_classified_semantic.xlsx"
+DEFAULT_API_KEY = "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"
+
+# ... (Previous functions unchanged) ...
+
+def get_study_advice(wrong_df, api_key):
+    """
+    Call OpenAI API to get study advice based on wrong answers.
+    """
+    if not api_key:
+        return "Please enter an OpenAI API Key."
+    
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        
+        # summarizing the mistakes
+        mistakes_summary = ""
+        for idx, row in wrong_df.iterrows():
+            mistakes_summary += f"- Topic: {row['Category']}\n  Question: {row['Question']}\n  Correct Answer: {row['Correct Answer']}\n\n"
+            
+        prompt = f"""
+我是一位正在學習生物化學的學生。我剛完成了一個測驗，並答錯了以下問題：
+
+{mistakes_summary}
+
+請分析這些錯誤。
+1. 識別我需要複習的弱點領域或概念。
+2. 針對每個弱點領域提供具體的學習建議或需要重點關注的主題。
+3. 請使用鼓勵且簡潔的方式回答。
+
+請用繁體中文回答。
+"""
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a helpful biochemistry tutor."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Error getting advice: {e}"
+
+# ... (Existing main function parts) ...
+
+    # Inside main(), at the end where results are shown:
+    else:
+        # Result Screen
+        score = st.session_state.score
+        total = len(st.session_state.questions)
+        st.balloons()
+        st.success(f"Quiz Completed! Your Score: {score} / {total}")
+        
+        # Analysis
+        wrong_data = []
+        for idx, q in enumerate(st.session_state.questions):
+            user_ans = st.session_state.user_answers.get(idx)
+            if user_ans != q['answer']:
+                wrong_data.append({
+                    "Question": q['Question'],
+                    "Category": q['分類'] if pd.notna(q['分類']) else "Unclassified",
+                    "Your Answer": user_ans,
+                    "Correct Answer": q['answer'],
+                    "Option A": q['A'],
+                    "Option B": q['B'],
+                    "Option C": q['C'],
+                    "Option D": q['D']
+                })
+        
+        if wrong_data:
+            st.subheader("Analysis of Incorrect Answers")
+            wrong_df = pd.DataFrame(wrong_data)
+            
+            # Bar Chart
+            category_counts = wrong_df['Category'].value_counts().reset_index()
+            category_counts.columns = ['Category', 'Count']
+            
+            fig = px.bar(category_counts, x='Category', y='Count', title="Wrong Answers by Category")
+            st.plotly_chart(fig)
+            
+            st.write("### Detailed Review")
+            st.dataframe(wrong_df)
+            
+            st.divider()
+            st.subheader("🤖 AI Study Advisor")
+            
+            api_key = st.text_input("Enter OpenAI API Key for Study Advice:", type="password")
+            
+            if st.button("Get Study Advice"):
+                with st.spinner("Analyzing your answers..."):
+                    advice = get_study_advice(wrong_df, api_key)
+                    st.markdown(advice)
+            
+        else:
+            st.write("Perfect Score! Well done!")
+
+        if st.button("Restart Quiz"):
+            st.session_state.quiz_started = False
+            st.session_state.finished = False
+            st.rerun()
+
 
 def load_data():
     if not os.path.exists(EXCEL_FILE):
@@ -223,6 +326,20 @@ def main():
             
             st.write("### Detailed Review")
             st.dataframe(wrong_df)
+
+            st.divider()
+            st.subheader("🤖 AI Study Advisor")
+            
+            api_key = st.text_input("Enter OpenAI API Key for Study Advice:", 
+                                   value=DEFAULT_API_KEY,
+                                   type="password",
+                                   help="Using default key. You can override if needed.")
+            
+            if st.button("Get Study Advice"):
+                with st.spinner("Analyzing your answers..."):
+                    advice = get_study_advice(wrong_df, api_key)
+                    st.markdown(advice)
+
         else:
             st.write("Perfect Score! Well done!")
 
