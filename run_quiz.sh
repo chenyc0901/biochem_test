@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "Installing dependencies..."
-pip install streamlit pandas openpyxl plotly watchdog
+pip install streamlit pandas openpyxl plotly watchdog openai
 
 echo "Starting Quiz App..."
 streamlit run quiz_app.py
