@@ -84,6 +84,10 @@ def main():
 
     init_session_state()
 
+    # Initialize feedback state if not present
+    if 'feedback_mode' not in st.session_state:
+        st.session_state.feedback_mode = False
+
     if not st.session_state.quiz_started:
         st.write(f"Loaded {len(df)} questions from database.")
         if st.button("Start New Quiz (20 Questions)"):
@@ -103,7 +107,7 @@ def main():
         # Display Question Text
         st.markdown(f"**{q['Question']}**")
         
-        # Display Figure if exists
+        # Display Figure
         fig_path = q.get('Figure')
         if fig_path and isinstance(fig_path, str) and os.path.exists(fig_path):
             try:
@@ -118,35 +122,69 @@ def main():
         existing_ans = st.session_state.user_answers.get(idx, None)
         
         # Radio button
-        # Note: We need a unique key for each question's widget to reset properly
+        # Disable interaction if in feedback mode
         choice = st.radio(
             "Select an answer:",
             options,
             index=options.index(existing_ans) if existing_ans else None,
             format_func=lambda x: f"{x}. {q[x]}" if pd.notna(q[x]) else x,
-            key=f"q_{idx}"
+            key=f"q_{idx}",
+            disabled=st.session_state.feedback_mode
         )
+        
+        # Feedback Display
+        if st.session_state.feedback_mode:
+            correct_ans = q['answer']
+            st.error(f"Incorrect! The correct answer is: **{correct_ans}**.  \n\n{correct_ans}. {q[correct_ans]}")
         
         # Navigation Buttons
         col1, col2, col3 = st.columns([1, 1, 4])
         
-        with col1:
-            if idx > 0:
-                if st.button("Previous"):
-                    submit_answer(choice)
-                    prev_question()
-                    st.rerun()
+        # Button Logic
+        # If in feedback mode, button is "Confirm/Continue"
+        # If not, button is "Next"
         
         with col2:
-            if idx < total - 1:
-                if st.button("Next"):
-                    submit_answer(choice)
-                    next_question()
+            if st.session_state.feedback_mode:
+                # "Continue" button to actually move forward
+                if st.button("Continue"):
+                    st.session_state.feedback_mode = False
+                    if idx < total - 1:
+                        next_question()
+                    else:
+                        finish_quiz()
                     st.rerun()
             else:
-                if st.button("Submit Quiz"):
-                    submit_answer(choice)
-                    finish_quiz()
+                # Normal "Next" / "Submit" button
+                btn_text = "Next" if idx < total - 1 else "Submit Quiz"
+                if st.button(btn_text):
+                    if not choice:
+                        st.warning("Please select an answer.")
+                    else:
+                        # Record answer
+                        submit_answer(choice)
+                        
+                        # Check correctness
+                        if choice == q['answer']:
+                            # Correct -> Proceed
+                            if idx < total - 1:
+                                next_question()
+                            else:
+                                finish_quiz()
+                            st.rerun()
+                        else:
+                            # Incorrect -> Show Feedback
+                            st.session_state.feedback_mode = True
+                            st.rerun()
+        
+        with col1:
+             # Previous button (disabled in feedback mode usually, or allow backtracking?)
+             # User logic implies forward flow. Let's keep Previous but disable in feedback 
+             if idx > 0 and not st.session_state.feedback_mode:
+                if st.button("Previous"):
+                    # Save current state?
+                    if choice: submit_answer(choice)
+                    prev_question()
                     st.rerun()
 
     else:
